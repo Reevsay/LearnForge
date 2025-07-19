@@ -31,3 +31,11 @@ Authorization: Bearer 4%2F0AVMBsJiSCjMX-Y6G9nwLItK4UduHzBI2TXMYSWTEI0ZVeuiRj90P4
 # Get learning paths (requires JWT token)
 GET http://localhost:5000/api/learning-paths
 Authorization: Bearer 4%2F0AVMBsJiSCjMX-Y6G9nwLItK4UduHzBI2TXMYSWTEI0ZVeuiRj90P422mLyEKfLvUFXM1jA
+
+###
+POST http://localhost:5000/api/ai/generate
+Content-Type: application/json
+
+{
+  "topic": "Python Basics"
+}
