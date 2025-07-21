@@ -1,89 +1,202 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, TextField, Box, Typography, List, ListItem, ListItemText } from '@mui/material';
-import axios from 'axios';
-import { generateLearningPathContent } from '../services/ai';
+import { Button, TextField, Typography, LinearProgress, IconButton } from '@mui/material';
+import { Add, Delete, ExpandMore, ExpandLess, Share } from '@mui/icons-material';
+import {jwtDecode} from 'jwt-decode';
 
 function Dashboard() {
   const [learningPaths, setLearningPaths] = useState([]);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [expandedPath, setExpandedPath] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
-    const fetchLearningPaths = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        const response = await axios.get('http://localhost:5000/api/learning-paths', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        setLearningPaths(response.data);
-      } catch (error) {
-        console.error('Error fetching learning paths:', error);
-        navigate('/');
-      }
-    };
-    fetchLearningPaths();
+    const savedPaths = JSON.parse(localStorage.getItem('learningPaths')) || [];
+    setLearningPaths(savedPaths);
+    const token = localStorage.getItem('token');
+    if (!token) {
+      navigate('/login');
+      return;
+    }
+    const decoded = jwtDecode(token);
+    if (!decoded || !decoded.role) {
+      navigate('/login');
+      return;
+    }
+    const timer = setTimeout(() => {
+      const element = document.querySelector('.dashboard-container');
+      if (element) element.classList.add('animate-fadeIn');
+    }, 100);
+    return () => clearTimeout(timer);
   }, [navigate]);
 
-  const handleCreateLearningPath = async () => {
-    console.log('Button clicked, starting AI generation for:', title); // Debug log
-    try {
-      const token = localStorage.getItem('token');
-      const aiContent = await generateLearningPathContent(title);
-      console.log('AI content received:', aiContent); // Debug log
-      const enhancedDescription = `${description}\nAI-Generated Content: ${aiContent}`;
-      const response = await axios.post(
-        'http://localhost:5000/api/learning-paths',
-        { title, description: enhancedDescription },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      setLearningPaths([...learningPaths, response.data]);
-      setTitle('');
-      setDescription('');
-    } catch (error) {
-      console.error('Error creating learning path:', error);
-      alert('Error creating learning path. Check console for details.');
+const handleCreateLearningPath = async () => {
+  if (!title.trim() || !description.trim()) return;
+
+  setLoading(true);
+  try {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      alert('Please log in to create a learning path.');
+      navigate('/login');
+      return;
+    }
+    console.log('Logging in with:', { title, description });
+    const detailedPath = '1. Mock Step: Learn basics\n2. Mock Step 2: Practice'; // Fallback
+    const newPath = { title, description, id: Date.now(), progress: 0, detailedPath };
+    const updatedPaths = [...learningPaths, newPath];
+    setLearningPaths(updatedPaths);
+    localStorage.setItem('learningPaths', JSON.stringify(updatedPaths));
+    setTitle('');
+    setDescription('');
+  } catch (error) {
+    console.error('Error fetching AI suggestion:', error);
+    alert('Failed to generate suggestion. Using mock data.');
+  } finally {
+    setLoading(false);
+  }
+};
+  const getAISuggestionFromGemini = async (title, description, token) => {
+  const url = '/api/ai/generate'; // Matches backend route
+  const prompt = `Create a detailed, step-by-step learning path for the topic titled "${title}" with description "${description}". Provide 5-10 specific steps, including resources (e.g., books, websites, videos), milestones, and tasks. Format the response as a numbered list, with each step clearly outlined (e.g., 1. Learn basics with [resource], 2. Complete [task], etc.). Keep it structured and relevant.`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({ prompt }),
+  });
+
+  if (!response.ok) throw new Error(`API request failed with status ${response.status}`);
+  const data = await response.json();
+  return data.candidates?.[0]?.output || 'No detailed path generated. Try again.';
+};
+
+  const handleToggleExpand = (id) => {
+    setExpandedPath(expandedPath === id ? null : id);
+  };
+
+  const handleDeletePath = (id) => {
+    const updatedPaths = learningPaths.filter(path => path.id !== id);
+    setLearningPaths(updatedPaths);
+    localStorage.setItem('learningPaths', JSON.stringify(updatedPaths));
+  };
+
+  const handleSharePath = (id) => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      alert('Please log in to share a learning path.');
+      navigate('/login');
+      return;
+    }
+    const decoded = jwtDecode(token);
+    if (decoded.role === 'student' && window.confirm('Share this path with an instructor?')) {
+      alert(`Share link: http://localhost:5173/share/${id} (Implement sharing logic)`); // Placeholder
+      // TODO: Implement API call to share with instructor (e.g., POST to /api/share)
+    } else if (decoded.role === 'instructor') {
+      alert('Instructors cannot share paths.');
     }
   };
 
+  const token = localStorage.getItem('token');
+  const role = token ? jwtDecode(token).role : 'guest';
+
+  if (!token || role === 'guest') return <div>Please log in to access this page.</div>;
+
   return (
-    <Box sx={{ maxWidth: 600, mx: 'auto', mt: 5 }}>
-      <Typography variant="h4" gutterBottom>Dashboard</Typography>
-      <Button
-        variant="contained"
-        onClick={handleCreateLearningPath} // Ensure this is correct
-        sx={{ mb: 2 }}
-      >
-        Logout
-      </Button>
-      <Typography variant="h6">Create Learning Path</Typography>
-      <TextField
-        label="Title"
-        fullWidth
-        margin="normal"
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-      />
-      <TextField
-        label="Description"
-        fullWidth
-        margin="normal"
-        value={description}
-        onChange={(e) => setDescription(e.target.value)}
-      />
-      <Button variant="contained" onClick={handleCreateLearningPath} sx={{ mt: 2 }}>
-        Create with AI
-      </Button>
-      <Typography variant="h6" sx={{ mt: 4 }}>Your Learning Paths</Typography>
-      <List>
-        {learningPaths.map((path) => (
-          <ListItem key={path.id}>
-            <ListItemText primary={path.title} secondary={path.description} />
-          </ListItem>
-        ))}
-      </List>
-    </Box>
+    <div className="dashboard-container" style={{ backgroundColor: '#0a0a0a', color: 'white', fontFamily: "'Inter', sans-serif", display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 20px', minHeight: '100vh' }}>
+      <div className="header" style={{ textAlign: 'center', maxWidth: '800px' }}>
+        <Typography variant="h1" style={{ fontSize: '3rem', fontWeight: 800, marginBottom: '20px' }}>
+          AI Learning Path Dashboard
+        </Typography>
+        <Typography variant="body1" style={{ fontSize: '1.2rem', color: '#ccc', lineHeight: 1.6, marginBottom: '30px' }}>
+          Manage and track your personalized learning paths generated by AI. Add, edit, and monitor your progress here.
+        </Typography>
+      </div>
+
+      <div className="content" style={{ width: '100%', maxWidth: '1100px', marginTop: '40px' }}>
+        <div className="section" style={{ backgroundColor: '#1a1a1a', border: '1px solid #333', borderRadius: '12px', padding: '24px', marginBottom: '20px' }}>
+          <Typography variant="h2" style={{ fontSize: '1.5rem', marginBottom: '12px' }}>Create New Path</Typography>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <TextField
+              label="Title"
+              fullWidth
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              InputProps={{ style: { color: 'white' } }}
+              InputLabelProps={{ style: { color: '#4ade80' } }}
+              style={{ backgroundColor: '#111', borderRadius: '8px' }}
+            />
+            <TextField
+              label="Description"
+              fullWidth
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              InputProps={{ style: { color: 'white' } }}
+              InputLabelProps={{ style: { color: '#4ade80' } }}
+              style={{ backgroundColor: '#111', borderRadius: '8px' }}
+            />
+            <Button
+              variant="contained"
+              startIcon={<Add />}
+              onClick={handleCreateLearningPath}
+              style={{ backgroundColor: '#4ade80', color: '#0a0a0a', padding: '12px 24px', fontSize: '1rem', borderRadius: '8px', transition: 'all 0.3s ease' }}
+              onMouseOver={(e) => (e.target.style.backgroundColor = '#38ef7d')}
+              onMouseOut={(e) => (e.target.style.backgroundColor = '#4ade80')}
+              disabled={!title.trim() || !description.trim() || loading}
+            >
+              {loading ? 'Generating...' : 'Add Path'}
+            </Button>
+          </div>
+        </div>
+
+        <div className="section" style={{ backgroundColor: '#1a1a1a', border: '1px solid #333', borderRadius: '12px', padding: '24px', marginBottom: '20px' }}>
+          <Typography variant="h2" style={{ fontSize: '1.5rem', marginBottom: '12px' }}>Your Learning Paths</Typography>
+          {learningPaths.length > 0 ? (
+            learningPaths.map((path) => (
+              <div key={path.id} style={{ backgroundColor: '#111', borderRadius: '8px', padding: '16px', marginBottom: '12px', position: 'relative' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Typography variant="body1" style={{ fontWeight: 600 }}>{path.title}</Typography>
+                  <div>
+                    <IconButton onClick={() => handleToggleExpand(path.id)} style={{ color: '#4ade80', marginRight: '10px' }}>
+                      {expandedPath === path.id ? <ExpandLess /> : <ExpandMore />}
+                    </IconButton>
+                    <IconButton onClick={() => handleDeletePath(path.id)} style={{ color: '#ff4444' }}>
+                      <Delete />
+                    </IconButton>
+                    {role === 'student' && <IconButton onClick={() => handleSharePath(path.id)} style={{ color: '#4ade80' }}>
+                      <Share />
+                    </IconButton>}
+                  </div>
+                </div>
+                <Typography variant="body2" style={{ color: '#ccc', lineHeight: 1.6, marginTop: '8px' }}>{path.description}</Typography>
+                {expandedPath === path.id && (
+                  <div style={{ marginTop: '12px', paddingLeft: '20px' }}>
+                    <Typography variant="caption" style={{ color: '#4ade80', display: 'block', marginBottom: '8px' }}>Detailed Learning Path:</Typography>
+                    <div style={{ color: '#ccc' }}>
+                      {path.detailedPath.split('\n').map((step, index) => (
+                        step.trim() && <div key={index} style={{ marginBottom: '8px' }}>{index + 1}. {step.trim()}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <LinearProgress variant="determinate" value={path.progress || 0} style={{ marginTop: '12px', backgroundColor: '#333' }} />
+              </div>
+            ))
+          ) : (
+            <Typography variant="body2" style={{ color: '#ccc', textAlign: 'center', marginTop: '16px' }}>No paths yet! Create one to start. 🚀</Typography>
+          )}
+        </div>
+      </div>
+
+      <div className="footer" style={{ textAlign: 'center', marginTop: '80px', fontSize: '0.9rem', color: '#777' }}>
+        © 2025 AI Path Creator. All rights reserved.
+      </div>
+    </div>
   );
 }
 
