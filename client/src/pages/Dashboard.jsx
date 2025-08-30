@@ -1,83 +1,136 @@
 import React, { useState, useEffect } from 'react';
+import {
+  Container,
+  Typography,
+  Button,
+  TextField,
+  Paper,
+  Box,
+  Grid,
+  IconButton,
+  Radio,
+  RadioGroup,
+  FormControlLabel,
+  FormControl,
+  FormLabel,
+  Card,
+  CardContent,
+  CardActions,
+  Chip,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  Alert,
+} from '@mui/material';
+import {
+  Add as AddIcon,
+  Logout as LogoutIcon,
+  ExpandMore as ExpandMoreIcon,
+  Delete as DeleteIcon,
+  Share as ShareIcon,
+  Quiz as QuizIcon,
+  School as SchoolIcon,
+  PlayArrow as PlayArrowIcon,
+  CheckCircle as CheckCircleIcon,
+} from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import { Button, TextField, Typography, LinearProgress, IconButton } from '@mui/material';
-import { Add, Delete, ExpandMore, ExpandLess, Share } from '@mui/icons-material';
-import {jwtDecode} from 'jwt-decode';
+import { generateAIContent } from '../services/ai';
+import { getUserFromToken, removeToken } from '../utils/auth';
 
 function Dashboard() {
-  const [learningPaths, setLearningPaths] = useState([]);
+  const [user, setUser] = useState(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [contentType, setContentType] = useState('learningPath');
   const [loading, setLoading] = useState(false);
+  const [learningPaths, setLearningPaths] = useState([]);
+  const [quizzes, setQuizzes] = useState([]);
   const [expandedPath, setExpandedPath] = useState(null);
+  const [currentQuiz, setCurrentQuiz] = useState(null);
+  const [quizAnswers, setQuizAnswers] = useState({});
+  const [showResults, setShowResults] = useState(false);
+  const [quizScore, setQuizScore] = useState(0);
   const navigate = useNavigate();
 
   useEffect(() => {
-    const savedPaths = JSON.parse(localStorage.getItem('learningPaths')) || [];
-    setLearningPaths(savedPaths);
-    const token = localStorage.getItem('token');
-    if (!token) {
+    const user = getUserFromToken();
+    if (!user) {
       navigate('/login');
       return;
     }
-    const decoded = jwtDecode(token);
-    if (!decoded || !decoded.role) {
-      navigate('/login');
-      return;
+
+    setUser(user);
+
+    // Load saved data
+    const savedPaths = localStorage.getItem('learningPaths');
+    const savedQuizzes = localStorage.getItem('quizzes');
+    
+    if (savedPaths) {
+      setLearningPaths(JSON.parse(savedPaths));
     }
-    const timer = setTimeout(() => {
-      const element = document.querySelector('.dashboard-container');
-      if (element) element.classList.add('animate-fadeIn');
-    }, 100);
-    return () => clearTimeout(timer);
+    
+    if (savedQuizzes) {
+      setQuizzes(JSON.parse(savedQuizzes));
+    }
   }, [navigate]);
 
-const handleCreateLearningPath = async () => {
-  if (!title.trim() || !description.trim()) return;
+  const handleLogout = () => {
+    removeToken();
+    navigate('/login');
+  };
 
-  setLoading(true);
-  try {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      alert('Please log in to create a learning path.');
-      navigate('/login');
+  const handleCreateContent = async () => {
+    if (!title.trim() || !description.trim()) {
+      alert('Please fill in both title and description');
       return;
     }
-    console.log('Logging in with:', { title, description });
-    const detailedPath = '1. Mock Step: Learn basics\n2. Mock Step 2: Practice'; // Fallback
-    const newPath = { title, description, id: Date.now(), progress: 0, detailedPath };
-    const updatedPaths = [...learningPaths, newPath];
-    setLearningPaths(updatedPaths);
-    localStorage.setItem('learningPaths', JSON.stringify(updatedPaths));
-    setTitle('');
-    setDescription('');
-  } catch (error) {
-    console.error('Error fetching AI suggestion:', error);
-    alert('Failed to generate suggestion. Using mock data.');
-  } finally {
-    setLoading(false);
-  }
-};
-  const getAISuggestionFromGemini = async (title, description, token) => {
-  const url = '/api/ai/generate'; // Matches backend route
-  const prompt = `Create a detailed, step-by-step learning path for the topic titled "${title}" with description "${description}". Provide 5-10 specific steps, including resources (e.g., books, websites, videos), milestones, and tasks. Format the response as a numbered list, with each step clearly outlined (e.g., 1. Learn basics with [resource], 2. Complete [task], etc.). Keep it structured and relevant.`;
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
-    body: JSON.stringify({ prompt }),
-  });
-
-  if (!response.ok) throw new Error(`API request failed with status ${response.status}`);
-  const data = await response.json();
-  return data.candidates?.[0]?.output || 'No detailed path generated. Try again.';
-};
-
-  const handleToggleExpand = (id) => {
-    setExpandedPath(expandedPath === id ? null : id);
+    setLoading(true);
+    
+    try {
+      let content;
+      
+      if (contentType === 'learningPath') {
+        content = await generateAIContent('learning_path', title, description);
+        
+        const newPath = {
+          id: Date.now(),
+          title,
+          description,
+          content,
+          createdAt: new Date().toLocaleDateString(),
+          expanded: false
+        };
+        
+        const updatedPaths = [...learningPaths, newPath];
+        setLearningPaths(updatedPaths);
+        localStorage.setItem('learningPaths', JSON.stringify(updatedPaths));
+      } else {
+        content = await generateAIContent('quiz', title, description);
+        
+        const newQuiz = {
+          id: Date.now(),
+          title,
+          description,
+          questions: content.questions || [],
+          createdAt: new Date().toLocaleDateString(),
+          completed: false
+        };
+        
+        const updatedQuizzes = [...quizzes, newQuiz];
+        setQuizzes(updatedQuizzes);
+        localStorage.setItem('quizzes', JSON.stringify(updatedQuizzes));
+      }
+      
+      setTitle('');
+      setDescription('');
+      alert(`${contentType === 'learningPath' ? 'Learning Path' : 'Quiz'} created successfully!`);
+    } catch (error) {
+      console.error('Error creating content:', error);
+      alert('Failed to generate content. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDeletePath = (id) => {
@@ -86,117 +139,407 @@ const handleCreateLearningPath = async () => {
     localStorage.setItem('learningPaths', JSON.stringify(updatedPaths));
   };
 
-  const handleSharePath = (id) => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      alert('Please log in to share a learning path.');
-      navigate('/login');
-      return;
-    }
-    const decoded = jwtDecode(token);
-    if (decoded.role === 'student' && window.confirm('Share this path with an instructor?')) {
-      alert(`Share link: http://localhost:5173/share/${id} (Implement sharing logic)`); // Placeholder
-      // TODO: Implement API call to share with instructor (e.g., POST to /api/share)
-    } else if (decoded.role === 'instructor') {
-      alert('Instructors cannot share paths.');
-    }
+  const handleDeleteQuiz = (id) => {
+    const updatedQuizzes = quizzes.filter(quiz => quiz.id !== id);
+    setQuizzes(updatedQuizzes);
+    localStorage.setItem('quizzes', JSON.stringify(updatedQuizzes));
   };
 
-  const token = localStorage.getItem('token');
-  const role = token ? jwtDecode(token).role : 'guest';
+  const handleToggleExpand = (id) => {
+    setExpandedPath(expandedPath === id ? null : id);
+  };
 
-  if (!token || role === 'guest') return <div>Please log in to access this page.</div>;
+  const handleStartQuiz = (quiz) => {
+    setCurrentQuiz(quiz);
+    setQuizAnswers({});
+    setShowResults(false);
+    setQuizScore(0);
+  };
 
-  return (
-    <div className="dashboard-container" style={{ backgroundColor: '#0a0a0a', color: 'white', fontFamily: "'Inter', sans-serif", display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 20px', minHeight: '100vh' }}>
-      <div className="header" style={{ textAlign: 'center', maxWidth: '800px' }}>
-        <Typography variant="h1" style={{ fontSize: '3rem', fontWeight: 800, marginBottom: '20px' }}>
-          AI Learning Path Dashboard
-        </Typography>
-        <Typography variant="body1" style={{ fontSize: '1.2rem', color: '#ccc', lineHeight: 1.6, marginBottom: '30px' }}>
-          Manage and track your personalized learning paths generated by AI. Add, edit, and monitor your progress here.
-        </Typography>
-      </div>
+  const handleQuizAnswer = (questionIndex, answer) => {
+    setQuizAnswers(prev => ({
+      ...prev,
+      [questionIndex]: answer
+    }));
+  };
 
-      <div className="content" style={{ width: '100%', maxWidth: '1100px', marginTop: '40px' }}>
-        <div className="section" style={{ backgroundColor: '#1a1a1a', border: '1px solid #333', borderRadius: '12px', padding: '24px', marginBottom: '20px' }}>
-          <Typography variant="h2" style={{ fontSize: '1.5rem', marginBottom: '12px' }}>Create New Path</Typography>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <TextField
-              label="Title"
-              fullWidth
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              InputProps={{ style: { color: 'white' } }}
-              InputLabelProps={{ style: { color: '#4ade80' } }}
-              style={{ backgroundColor: '#111', borderRadius: '8px' }}
-            />
-            <TextField
-              label="Description"
-              fullWidth
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              InputProps={{ style: { color: 'white' } }}
-              InputLabelProps={{ style: { color: '#4ade80' } }}
-              style={{ backgroundColor: '#111', borderRadius: '8px' }}
-            />
+  const handleSubmitQuiz = () => {
+    if (!currentQuiz) return;
+    
+    let correct = 0;
+    currentQuiz.questions.forEach((question, index) => {
+      if (quizAnswers[index] === question.correct_answer) {
+        correct++;
+      }
+    });
+    
+    const score = Math.round((correct / currentQuiz.questions.length) * 100);
+    setQuizScore(score);
+    setShowResults(true);
+    
+    // Mark quiz as completed
+    const updatedQuizzes = quizzes.map(quiz => 
+      quiz.id === currentQuiz.id ? { ...quiz, completed: true } : quiz
+    );
+    setQuizzes(updatedQuizzes);
+    localStorage.setItem('quizzes', JSON.stringify(updatedQuizzes));
+  };
+
+  const handleSharePath = (id) => {
+    navigator.clipboard.writeText(`Learning Path ID: ${id}`);
+    alert('Learning path ID copied to clipboard!');
+  };
+
+  if (currentQuiz && !showResults) {
+    return (
+      <Container maxWidth="md" sx={{ py: 4 }}>
+        <Paper sx={{ p: 3, backgroundColor: '#1a1a1a', color: 'white' }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+            <Typography variant="h4" component="h1">
+              {currentQuiz.title}
+            </Typography>
+            <Button
+              variant="outlined"
+              onClick={() => setCurrentQuiz(null)}
+              sx={{ color: 'white', borderColor: 'white' }}
+            >
+              Exit Quiz
+            </Button>
+          </Box>
+          
+          <Typography variant="body1" sx={{ mb: 4, color: '#ccc' }}>
+            {currentQuiz.description}
+          </Typography>
+          
+          {currentQuiz.questions.map((question, index) => (
+            <Card key={index} sx={{ mb: 3, backgroundColor: '#2a2a2a' }}>
+              <CardContent>
+                <Typography variant="h6" sx={{ mb: 2, color: 'white' }}>
+                  {index + 1}. {question.question}
+                </Typography>
+                <FormControl component="fieldset">
+                  <RadioGroup
+                    value={quizAnswers[index] || ''}
+                    onChange={(e) => handleQuizAnswer(index, e.target.value)}
+                  >
+                    {question.options.map((option, optionIndex) => (
+                      <FormControlLabel
+                        key={optionIndex}
+                        value={option}
+                        control={<Radio sx={{ color: 'white' }} />}
+                        label={<Typography sx={{ color: 'white' }}>{option}</Typography>}
+                      />
+                    ))}
+                  </RadioGroup>
+                </FormControl>
+              </CardContent>
+            </Card>
+          ))}
+          
+          <Box sx={{ textAlign: 'center', mt: 4 }}>
             <Button
               variant="contained"
-              startIcon={<Add />}
-              onClick={handleCreateLearningPath}
-              style={{ backgroundColor: '#4ade80', color: '#0a0a0a', padding: '12px 24px', fontSize: '1rem', borderRadius: '8px', transition: 'all 0.3s ease' }}
-              onMouseOver={(e) => (e.target.style.backgroundColor = '#38ef7d')}
-              onMouseOut={(e) => (e.target.style.backgroundColor = '#4ade80')}
-              disabled={!title.trim() || !description.trim() || loading}
+              size="large"
+              onClick={handleSubmitQuiz}
+              disabled={Object.keys(quizAnswers).length !== currentQuiz.questions.length}
+              sx={{
+                backgroundColor: '#4caf50',
+                '&:hover': { backgroundColor: '#45a049' }
+              }}
             >
-              {loading ? 'Generating...' : 'Add Path'}
+              Submit Quiz
             </Button>
-          </div>
-        </div>
+          </Box>
+        </Paper>
+      </Container>
+    );
+  }
 
-        <div className="section" style={{ backgroundColor: '#1a1a1a', border: '1px solid #333', borderRadius: '12px', padding: '24px', marginBottom: '20px' }}>
-          <Typography variant="h2" style={{ fontSize: '1.5rem', marginBottom: '12px' }}>Your Learning Paths</Typography>
-          {learningPaths.length > 0 ? (
-            learningPaths.map((path) => (
-              <div key={path.id} style={{ backgroundColor: '#111', borderRadius: '8px', padding: '16px', marginBottom: '12px', position: 'relative' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <Typography variant="body1" style={{ fontWeight: 600 }}>{path.title}</Typography>
-                  <div>
-                    <IconButton onClick={() => handleToggleExpand(path.id)} style={{ color: '#4ade80', marginRight: '10px' }}>
-                      {expandedPath === path.id ? <ExpandLess /> : <ExpandMore />}
-                    </IconButton>
-                    <IconButton onClick={() => handleDeletePath(path.id)} style={{ color: '#ff4444' }}>
-                      <Delete />
-                    </IconButton>
-                    {role === 'student' && <IconButton onClick={() => handleSharePath(path.id)} style={{ color: '#4ade80' }}>
-                      <Share />
-                    </IconButton>}
-                  </div>
-                </div>
-                <Typography variant="body2" style={{ color: '#ccc', lineHeight: 1.6, marginTop: '8px' }}>{path.description}</Typography>
-                {expandedPath === path.id && (
-                  <div style={{ marginTop: '12px', paddingLeft: '20px' }}>
-                    <Typography variant="caption" style={{ color: '#4ade80', display: 'block', marginBottom: '8px' }}>Detailed Learning Path:</Typography>
-                    <div style={{ color: '#ccc' }}>
-                      {path.detailedPath.split('\n').map((step, index) => (
-                        step.trim() && <div key={index} style={{ marginBottom: '8px' }}>{index + 1}. {step.trim()}</div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                <LinearProgress variant="determinate" value={path.progress || 0} style={{ marginTop: '12px', backgroundColor: '#333' }} />
-              </div>
-            ))
-          ) : (
-            <Typography variant="body2" style={{ color: '#ccc', textAlign: 'center', marginTop: '16px' }}>No paths yet! Create one to start. 🚀</Typography>
-          )}
-        </div>
-      </div>
+  if (showResults) {
+    return (
+      <Container maxWidth="md" sx={{ py: 4 }}>
+        <Paper sx={{ p: 3, backgroundColor: '#1a1a1a', color: 'white', textAlign: 'center' }}>
+          <Typography variant="h4" component="h1" sx={{ mb: 3 }}>
+            Quiz Results
+          </Typography>
+          
+          <Box sx={{ mb: 4 }}>
+            <Typography variant="h2" sx={{ color: quizScore >= 70 ? '#4caf50' : '#f44336', mb: 2 }}>
+              {quizScore}%
+            </Typography>
+            <Typography variant="h6" sx={{ color: '#ccc' }}>
+              You scored {Object.values(quizAnswers).filter((answer, index) => 
+                answer === currentQuiz.questions[index].correct_answer
+              ).length} out of {currentQuiz.questions.length} questions correctly
+            </Typography>
+          </Box>
+          
+          <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
+            <Button
+              variant="contained"
+              onClick={() => {
+                setCurrentQuiz(null);
+                setShowResults(false);
+              }}
+              sx={{ backgroundColor: '#2196f3' }}
+            >
+              Back to Dashboard
+            </Button>
+            <Button
+              variant="outlined"
+              onClick={() => handleStartQuiz(currentQuiz)}
+              sx={{ color: 'white', borderColor: 'white' }}
+            >
+              Retake Quiz
+            </Button>
+          </Box>
+        </Paper>
+      </Container>
+    );
+  }
 
-      <div className="footer" style={{ textAlign: 'center', marginTop: '80px', fontSize: '0.9rem', color: '#777' }}>
-        © 2025 AI Path Creator. All rights reserved.
-      </div>
-    </div>
+  return (
+    <Container maxWidth="lg" sx={{ py: 4, backgroundColor: '#0a0a0a', minHeight: '100vh' }}>
+      {/* Header */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+        <Typography variant="h3" component="h1" sx={{ color: 'white' }}>
+          Smart Learning Dashboard
+        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Typography variant="h6" sx={{ color: '#ccc' }}>
+            Welcome, {user?.name || user?.username}!
+          </Typography>
+          <IconButton
+            onClick={handleLogout}
+            sx={{ color: 'white' }}
+            title="Logout"
+          >
+            <LogoutIcon />
+          </IconButton>
+        </Box>
+      </Box>
+
+      {/* Content Creation Section */}
+      <Paper sx={{ p: 3, mb: 4, backgroundColor: '#1a1a1a', border: '1px solid #333' }}>
+        <Typography variant="h5" sx={{ mb: 3, color: 'white' }}>
+          Create New Content
+        </Typography>
+        
+        <FormControl component="fieldset" sx={{ mb: 3 }}>
+          <FormLabel component="legend" sx={{ color: 'white', mb: 2 }}>
+            What would you like to create?
+          </FormLabel>
+          <RadioGroup
+            value={contentType}
+            onChange={(e) => setContentType(e.target.value)}
+            row
+          >
+            <FormControlLabel
+              value="learningPath"
+              control={<Radio sx={{ color: 'white' }} />}
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <SchoolIcon />
+                  <Typography sx={{ color: 'white' }}>Learning Path</Typography>
+                </Box>
+              }
+            />
+            <FormControlLabel
+              value="quiz"
+              control={<Radio sx={{ color: 'white' }} />}
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <QuizIcon />
+                  <Typography sx={{ color: 'white' }}>Quiz</Typography>
+                </Box>
+              }
+            />
+          </RadioGroup>
+        </FormControl>
+
+        <Grid container spacing={3}>
+          <Grid item xs={12} md={6}>
+            <TextField
+              fullWidth
+              label="Title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              variant="outlined"
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  color: 'white',
+                  '& fieldset': { borderColor: '#555' },
+                  '&:hover fieldset': { borderColor: '#777' },
+                  '&.Mui-focused fieldset': { borderColor: '#2196f3' }
+                },
+                '& .MuiInputLabel-root': { color: '#ccc' }
+              }}
+            />
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <TextField
+              fullWidth
+              label="Description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              variant="outlined"
+              multiline
+              rows={2}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  color: 'white',
+                  '& fieldset': { borderColor: '#555' },
+                  '&:hover fieldset': { borderColor: '#777' },
+                  '&.Mui-focused fieldset': { borderColor: '#2196f3' }
+                },
+                '& .MuiInputLabel-root': { color: '#ccc' }
+              }}
+            />
+          </Grid>
+          <Grid item xs={12}>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={handleCreateContent}
+              disabled={loading}
+              sx={{
+                backgroundColor: '#4caf50',
+                '&:hover': { backgroundColor: '#45a049' },
+                '&:disabled': { backgroundColor: '#333' }
+              }}
+            >
+              {loading ? 'Generating...' : `Create ${contentType === 'learningPath' ? 'Learning Path' : 'Quiz'}`}
+            </Button>
+          </Grid>
+        </Grid>
+      </Paper>
+
+      {/* Learning Paths Section */}
+      {learningPaths.length > 0 && (
+        <Paper sx={{ p: 3, mb: 4, backgroundColor: '#1a1a1a', border: '1px solid #333' }}>
+          <Typography variant="h5" sx={{ mb: 3, color: 'white', display: 'flex', alignItems: 'center', gap: 1 }}>
+            <SchoolIcon />
+            Your Learning Paths
+          </Typography>
+          <Grid container spacing={2}>
+            {learningPaths.map((path) => (
+              <Grid item xs={12} md={6} lg={4} key={path.id}>
+                <Card sx={{ backgroundColor: '#2a2a2a', height: '100%' }}>
+                  <CardContent>
+                    <Typography variant="h6" sx={{ color: 'white', mb: 1 }}>
+                      {path.title}
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: '#ccc', mb: 2 }}>
+                      {path.description}
+                    </Typography>
+                    <Chip
+                      label={path.createdAt}
+                      size="small"
+                      sx={{ backgroundColor: '#4caf50', color: 'white' }}
+                    />
+                  </CardContent>
+                  <CardActions>
+                    <Button
+                      size="small"
+                      onClick={() => handleToggleExpand(path.id)}
+                      sx={{ color: '#2196f3' }}
+                    >
+                      {expandedPath === path.id ? 'Hide' : 'View'}
+                    </Button>
+                    <IconButton
+                      onClick={() => handleSharePath(path.id)}
+                      sx={{ color: '#ccc' }}
+                    >
+                      <ShareIcon />
+                    </IconButton>
+                    <IconButton
+                      onClick={() => handleDeletePath(path.id)}
+                      sx={{ color: '#f44336' }}
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </CardActions>
+                  {expandedPath === path.id && (
+                    <CardContent sx={{ pt: 0 }}>
+                      <Typography variant="body2" sx={{ color: '#ddd' }}>
+                        {path.content}
+                      </Typography>
+                    </CardContent>
+                  )}
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+        </Paper>
+      )}
+
+      {/* Quizzes Section */}
+      {quizzes.length > 0 && (
+        <Paper sx={{ p: 3, backgroundColor: '#1a1a1a', border: '1px solid #333' }}>
+          <Typography variant="h5" sx={{ mb: 3, color: 'white', display: 'flex', alignItems: 'center', gap: 1 }}>
+            <QuizIcon />
+            Your Quizzes
+          </Typography>
+          <Grid container spacing={2}>
+            {quizzes.map((quiz) => (
+              <Grid item xs={12} md={6} lg={4} key={quiz.id}>
+                <Card sx={{ backgroundColor: '#2a2a2a', height: '100%' }}>
+                  <CardContent>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+                      <Typography variant="h6" sx={{ color: 'white' }}>
+                        {quiz.title}
+                      </Typography>
+                      {quiz.completed && (
+                        <CheckCircleIcon sx={{ color: '#4caf50' }} />
+                      )}
+                    </Box>
+                    <Typography variant="body2" sx={{ color: '#ccc', mb: 2 }}>
+                      {quiz.description}
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: '#bbb', mb: 2 }}>
+                      {quiz.questions.length} questions
+                    </Typography>
+                    <Chip
+                      label={quiz.createdAt}
+                      size="small"
+                      sx={{ backgroundColor: '#ff9800', color: 'white' }}
+                    />
+                  </CardContent>
+                  <CardActions>
+                    <Button
+                      size="small"
+                      onClick={() => handleStartQuiz(quiz)}
+                      startIcon={<PlayArrowIcon />}
+                      sx={{ color: '#4caf50' }}
+                    >
+                      {quiz.completed ? 'Retake' : 'Start'}
+                    </Button>
+                    <IconButton
+                      onClick={() => handleDeleteQuiz(quiz.id)}
+                      sx={{ color: '#f44336' }}
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </CardActions>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+        </Paper>
+      )}
+
+      {/* Empty State */}
+      {learningPaths.length === 0 && quizzes.length === 0 && (
+        <Paper sx={{ p: 4, backgroundColor: '#1a1a1a', border: '1px solid #333', textAlign: 'center' }}>
+          <Typography variant="h6" sx={{ color: '#ccc', mb: 2 }}>
+            No content created yet
+          </Typography>
+          <Typography variant="body1" sx={{ color: '#888' }}>
+            Use the form above to create your first learning path or quiz!
+          </Typography>
+        </Paper>
+      )}
+    </Container>
   );
 }
 

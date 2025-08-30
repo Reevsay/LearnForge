@@ -35,6 +35,5 @@ router.post('/generate', async (req, res) => {
     res.status(500).json({ error: 'Failed to generate suggestion', details: error.message });
   }
 });
-router.post('/generate', getAISuggestion);
 
 module.exports = router;
