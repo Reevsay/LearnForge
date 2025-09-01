@@ -39,12 +39,29 @@ Before running this project, make sure you have:
 - **PostgreSQL** database (or use Neon Cloud)
 - **Google Gemini API Key**
 
-## ⚙️ Installation & Setup
+## 🚀 Quick Start (One Command)
+
+**Want to run everything with just one command?** 
+
+```bash
+python run_app.py
+```
+
+This script will automatically:
+- ✅ Check dependencies
+- ✅ Install npm packages
+- ✅ Setup environment files
+- ✅ Start both servers
+- ✅ Open the application in your browser
+
+See [QUICK_START.md](QUICK_START.md) for more options including Windows batch files.
+
+## ⚙️ Manual Installation & Setup
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/Reevsay/smart-learning-path.git
-cd smart-learning-path
+git clone https://github.com/Reevsay/LearnForge.git
+cd LearnForge
 ```
 
 ### 2. Backend Setup
