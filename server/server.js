@@ -31,4 +31,16 @@ sequelize.authenticate()
 sequelize.sync().then(() => console.log('Neon database synced')).catch(err => console.error('Sync failed:', err));
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log('\n' + '='.repeat(60));
+  console.log('🚀 LearnForge Backend Server Started Successfully!');
+  console.log('='.repeat(60));
+  console.log(`📍 Server running on: http://localhost:${PORT}`);
+  console.log(`🕐 Started at: ${new Date().toISOString()}`);
+  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🔑 Gemini API: ${process.env.GEMINI_API_KEY ? '✅ Configured' : '❌ Not configured'}`);
+  console.log(`💾 Database: ${process.env.DATABASE_URL ? '✅ Configured' : '❌ Not configured'}`);
+  console.log('='.repeat(60));
+  console.log('🎯 Ready to accept AI generation requests!');
+  console.log('='.repeat(60) + '\n');
+});

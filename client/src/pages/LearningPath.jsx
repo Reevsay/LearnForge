@@ -31,17 +31,39 @@ function LearningPath() {
   }, [navigate]);
 
   const handleGeneratePath = async () => {
+    const requestId = Date.now();
+    console.log(`\n🎯 [LearningPath-${requestId}] Starting learning path generation`);
+    console.log(`🕐 Timestamp: ${new Date().toISOString()}`);
+    
     if (!topic.trim()) {
+      console.warn(`⚠️ [LearningPath-${requestId}] No topic provided`);
       alert('Please enter a topic for your learning path');
       return;
     }
 
+    console.log(`📝 [LearningPath-${requestId}] Generation parameters:`);
+    console.log(`- Topic: "${topic}"`);
+    console.log(`- Level: ${level}`);
+    console.log(`- Duration: ${duration}`);
+    console.log(`- User: ${user?.email || 'Unknown'}`);
+
     setLoading(true);
+    console.log(`🔄 [LearningPath-${requestId}] Loading state set to true`);
+    
     try {
       const prompt = `Create a comprehensive ${level} level learning path for ${topic} that spans ${duration}. 
       Include weekly milestones, resources, and practical projects. Format as a structured learning journey.`;
       
+      console.log(`📋 [LearningPath-${requestId}] Generated prompt:`);
+      console.log(`"${prompt}"`);
+      
+      console.log(`🚀 [LearningPath-${requestId}] Calling generateAIContent...`);
+      const startTime = Date.now();
       const content = await generateAIContent('learningPath', topic, prompt);
+      const endTime = Date.now();
+      
+      console.log(`✅ [LearningPath-${requestId}] AI content generated successfully in ${endTime - startTime}ms`);
+      console.log(`📊 [LearningPath-${requestId}] Content preview:`, content);
       
       const newPath = {
         id: Date.now(),
@@ -50,23 +72,38 @@ function LearningPath() {
         level,
         duration,
         progress: 0,
-        content: content.content || content.text || '',
+        content: content.content || content.text || content.candidates?.[0]?.output || '',
         modules: generateModules(topic, level, duration),
         createdAt: new Date().toLocaleDateString(),
         completed: false
       };
       
+      console.log(`💾 [LearningPath-${requestId}] Created new path object:`, newPath);
+      
       const updatedPaths = [...learningPaths, newPath];
       setLearningPaths(updatedPaths);
       localStorage.setItem('learningPaths', JSON.stringify(updatedPaths));
       
+      console.log(`✅ [LearningPath-${requestId}] Learning path saved successfully`);
+      console.log(`📈 [LearningPath-${requestId}] Total paths: ${updatedPaths.length}`);
+      
       setTopic('');
       alert('Learning path generated successfully!');
     } catch (error) {
-      console.error('Error generating learning path:', error);
-      alert('Failed to generate learning path. Please try again.');
+      console.error(`💥 [LearningPath-${requestId}] Error generating learning path:`);
+      console.error(`- Error type: ${error.constructor.name}`);
+      console.error(`- Error message: ${error.message}`);
+      console.error(`- Error stack:`, error.stack);
+      
+      if (error.response) {
+        console.error(`- HTTP Status: ${error.response.status}`);
+        console.error(`- Response data:`, error.response.data);
+      }
+      
+      alert('Failed to generate learning path. Please check the console for details and try again.');
     } finally {
       setLoading(false);
+      console.log(`🔄 [LearningPath-${requestId}] Loading state set to false`);
     }
   };
 

@@ -16,10 +16,19 @@ export const generateLearningPathContent = async (topic) => {
 };
 
 export const generateAIContent = async (type, topic, customPrompt = null) => {
+  const requestId = Date.now();
+  console.log(`\n🎯 [Frontend-${requestId}] Starting AI content generation`);
+  console.log(`🕐 Timestamp: ${new Date().toISOString()}`);
+  console.log(`📝 Parameters:`);
+  console.log(`- Type: ${type}`);
+  console.log(`- Topic: ${topic}`);
+  console.log(`- Custom prompt: ${customPrompt ? 'Yes' : 'No'}`);
+  
   try {
     let prompt;
     if (customPrompt) {
       prompt = customPrompt;
+      console.log(`📋 [Frontend-${requestId}] Using custom prompt (${prompt.length} chars)`);
     } else if (type === 'quiz') {
       prompt = `Create exactly 10 multiple choice questions specifically about ${topic}. 
       Each question should have exactly 4 options (A, B, C, D), clearly indicate the correct answer, and provide a detailed explanation for why that answer is correct.
@@ -33,32 +42,55 @@ export const generateAIContent = async (type, topic, customPrompt = null) => {
       Explanation: [Detailed explanation of why this answer is correct and why other options are wrong]
       
       Make sure all questions are directly related to ${topic} and cover different aspects of the topic. Provide educational explanations that help users learn.`;
+      console.log(`🧠 [Frontend-${requestId}] Using quiz prompt template`);
     } else {
       prompt = `Generate content about ${topic}`;
+      console.log(`📄 [Frontend-${requestId}] Using general content prompt`);
     }
 
+    console.log(`📡 [Frontend-${requestId}] Sending request to backend API...`);
+    console.log(`🎯 URL: http://localhost:5000/api/ai/generate`);
+    console.log(`📝 Payload:`, { topic, prompt: prompt.substring(0, 100) + '...', type });
+    
+    const startTime = Date.now();
     const response = await axios.post('http://localhost:5000/api/ai/generate', { 
       topic,
       prompt,
       type 
     });
+    const endTime = Date.now();
     
-    console.log('AI Content response:', response.data);
+    console.log(`✅ [Frontend-${requestId}] Backend responded successfully in ${endTime - startTime}ms`);
+    console.log(`📊 Response status: ${response.status}`);
+    console.log(`📄 Response data:`, response.data);
     
     // For quiz type, return structured quiz data
     if (type === 'quiz') {
+      console.log(`🧠 [Frontend-${requestId}] Processing quiz response...`);
       return {
         questions: parseQuizFromText(response.data.content || response.data.text || '', topic)
       };
     }
     
+    console.log(`📋 [Frontend-${requestId}] Returning response data for type: ${type}`);
     return response.data;
   } catch (error) {
-    console.error('Error generating AI content:', {
-      message: error.message,
-      status: error.response?.status,
-      data: error.response?.data,
-    });
+    console.error(`💥 [Frontend-${requestId}] Error generating AI content:`);
+    console.error(`- Error type: ${error.constructor.name}`);
+    console.error(`- Error message: ${error.message}`);
+    
+    if (error.response) {
+      console.error(`- HTTP Status: ${error.response.status}`);
+      console.error(`- Response data:`, error.response.data);
+      console.error(`- Response headers:`, error.response.headers);
+    } else if (error.request) {
+      console.error(`- Network error: No response received`);
+      console.error(`- Request details:`, error.request);
+    } else {
+      console.error(`- Setup error: ${error.message}`);
+    }
+    
+    console.error(`- Full error object:`, error);
     throw error;
   }
 };
